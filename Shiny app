@@ -1,3 +1,11 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
 
 library(shiny)
 library(tidyverse)
@@ -9,7 +17,8 @@ library(formattable)
 library(gridExtra)
 library(ggthemes)
 
-#Data handling
+#Data 
+
 
 CovidFaelle_Timeline <- read_delim("https://covid19-dashboard.ages.at/data/CovidFaelle_Timeline.csv",
                                    ";",
@@ -68,7 +77,8 @@ joined.data.diff.wien<-joined.data.diff.all%>%filter(Bundesland == 'Wien')
 ui <- fluidPage(
 
     # Application title
-    titlePanel("Alfs Covid Data"),
+    titlePanel(h1("Österreichische COVID Datenauswertung",h5("v0.1",
+                  h6(a("Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git"))))),
 
          # Show a plot of the generated distribution
         mainPanel(
