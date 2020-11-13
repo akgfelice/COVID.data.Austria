@@ -16,6 +16,7 @@ library(ggrepel)
 library(formattable)
 library(gridExtra)
 library(ggthemes)
+library(RColorBrewer)
 
 #Data 
 
@@ -70,7 +71,9 @@ joined.data.diff.all<-joined.data%>%
 
 joined.data.diff.wien<-joined.data.diff.all%>%filter(Bundesland == 'Wien')
 
-
+myColors <- brewer.pal(10,"Paired")
+names(myColors) <- levels(joined.data.diff.all$Bundesland)
+colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
 
 
 # Define UI for application that draws a histogram
@@ -79,11 +82,18 @@ ui <- fluidPage(
     # Application title
     titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
                   h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v_20-11-11",
-                  h6(a("Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
+                  h5("v0.201113",
+                  h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
 
          # Show a plot of the generated distribution
-        mainPanel(
+      
+    
+     mainPanel(
+       checkboxGroupInput("Bundesland.select", "Bundesland:", 
+                   choices=levels(joined.data.diff.all$Bundesland),
+                   selected = levels(joined.data.diff.all$Bundesland),
+                   inline = TRUE),
+       
            plotOutput("Anzahl.mean"),
            plotOutput("inzidenz"),
            plotOutput("increase.rate"),
@@ -95,6 +105,11 @@ ui <- fluidPage(
 
 
 server <- function(input, output) {
+  
+  joined.data.diff.all.f<- reactive({
+    joined.data.diff.all%>%filter(Bundesland %in% input$Bundesland.select)
+  })
+
 
     output$Anzahl.mean <- renderPlot({
         ggplot()+
@@ -104,8 +119,8 @@ server <- function(input, output) {
                  x= "Datum",
                  size="PositivitÃ¤srate")+
             
-            geom_point(data = joined.data.diff.all,
-                       aes(x= Time, y=AnzahlFaelle7Tage/7, color=Bundesland,order=BundeslandID,
+            geom_point(data = joined.data.diff.all.f(),
+                       aes(x= Time, y=AnzahlFaelle7Tage/7, color=Bundesland,
                            size=pos.rate.mean ))+
             scale_radius(range = c(0, 6))+
             
@@ -113,12 +128,12 @@ server <- function(input, output) {
             scale_y_continuous(trans = 'log10',limits =c(10,10000))+
             annotation_logticks(sides="lb")+
             
-            geom_line(data=joined.data.diff.all,
-                      aes(x=Time, y=AnzahlFaelle, color=Bundesland,order=BundeslandID))+
+            geom_line(data=joined.data.diff.all.f(),
+                      aes(x=Time, y=AnzahlFaelle, color=Bundesland))+
             
             geom_text_repel(aes(x= Time, y=AnzahlFaelle7Tage/7,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
                                 color=Bundesland),
-                            data=joined.data.diff.all%>%filter(Time == max(Time)),
+                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                             #direction = "y",
                             xlim = Sys.Date()+3,
                             min.segment.length = unit(0, 'lines'),
@@ -126,8 +141,10 @@ server <- function(input, output) {
                             segment.color = "black",
                             segment.alpha = 0.2
                             )+ 
-            
-            scale_colour_brewer(palette = "Paired")
+        colScale
+            #scale_colour_brewer(palette = "Paired", drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
+        #scale_colour_discrete(drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
+      
            
     })
     
@@ -139,7 +156,8 @@ server <- function(input, output) {
                  x= "Datum",
                  size="PositivitÃ¤srate")+
             
-            geom_point(data = joined.data.diff.all,aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
+            geom_point(data = joined.data.diff.all.f(),
+                       aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
                                                        size=pos.rate.mean))+
             scale_radius(range = c(0, 6))+
             xlim(Sys.Date()-28,Sys.Date()+5)+
@@ -147,15 +165,16 @@ server <- function(input, output) {
             
             geom_text_repel(aes(x= Time, y= SiebenTageInzidenzFaelle, label=formatC(SiebenTageInzidenzFaelle,digits=2,format = "f"),
                                 color=Bundesland),
-                            data=joined.data.diff.all%>%filter(Time == max(Time)),
+                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                             xlim = Sys.Date()+2,
                             show.legend = FALSE,
                             min.segment.length = unit(0, 'lines'),
                             segment.color = "black",
                             segment.alpha = 0.2
                             )+
-            scale_colour_brewer(palette = "Paired")
-            
+            colScale                
+     
+             
     })
     
     output$ICU <- renderPlot({
@@ -164,7 +183,7 @@ server <- function(input, output) {
              y= "% Auslastung",
              x= "Datum"
              )+
-        geom_step(data = joined.data.diff.all,
+        geom_step(data = joined.data.diff.all.f(),
                   aes(x= Time, y=ICU.Auslastung, color=Bundesland
                   ), size=1.5,
                   
@@ -173,10 +192,10 @@ server <- function(input, output) {
         
         
         
-        geom_text_repel(data=joined.data.diff.all%>%filter(Time == max(Time)),
-                        aes(x= Time, y=ICU.Auslastung,               
+        geom_text_repel(aes(x= Time, y=ICU.Auslastung,               
                             label=formatC((ICU.Auslastung),digits=1,format ="f"),
                             color=Bundesland),
+                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                         xlim = Sys.Date()+3,
                         min.segment.length = unit(0, 'lines'),
                         show.legend = FALSE,
@@ -184,8 +203,8 @@ server <- function(input, output) {
                         segment.alpha = 0.2
                         
         )+ 
-        #ylim(-5,1.25*max(tail(joined.data.diff.all$ICU.Auslastung,10)))+
-        scale_colour_brewer(palette = "Paired")
+        colScale                
+      
       
     }) 
   
@@ -194,7 +213,7 @@ server <- function(input, output) {
             labs(title="tÃ¤gliche Steigerungsrate in %",
                  y= "tÃ¤gliche Steigerung in %",
                  x= "Zeit")+
-            geom_point(data = joined.data.diff.all,
+            geom_point(data = joined.data.diff.all.f(),
                        aes(x= Time, y=increase.mean, color=Bundesland,
                            #size=pos.rate.mean
                        ))+
@@ -205,13 +224,13 @@ server <- function(input, output) {
             # scale_y_continuous(trans = 'log10',limits =c(10,4000))+
             # annotation_logticks(sides="lb")+
             
-            geom_line(data=joined.data.diff.all,
+            geom_line(data=joined.data.diff.all.f(),
                       aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
             
             geom_text_repel(aes(x= Time, y=increase.mean,               
                                 label=formatC((increase.mean),digits=1,format ="f"),
                                 color=Bundesland),
-                            data=joined.data.diff.all%>%filter(Time == max(Time)),
+                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                             #direction = "y",
                             xlim = Sys.Date()+3,
                             min.segment.length = unit(0, 'lines'),
@@ -219,13 +238,15 @@ server <- function(input, output) {
                             segment.color = "black",
                             segment.alpha = 0.2
             )+ 
-            ylim(1.25*min(tail(joined.data.diff.all$increase.mean,10)),1.25*max(tail(joined.data.diff.all$increase.mean,10)))+
-            scale_colour_brewer(palette = "Paired")
+            ylim(1.25*min(tail(joined.data.diff.all$increase.mean,280)),1.25*max(tail(joined.data.diff.all$increase.mean,280)))+
+        colScale                
+      
+
            
     })
     
     output$pos.rate <- renderPlot({
-        ggplot(data = joined.data.diff.all)+
+        ggplot(data = joined.data.diff.all.f())+
             labs(title="PositivitÃ¤tsraten",
                  y= "PositivitÃ¤tsraten",
                  x= "Zeit")+
@@ -244,7 +265,7 @@ server <- function(input, output) {
             label = formatC(pos.rate.mean, digits = 1, format = "f"),
             color = Bundesland
           ),
-          data = joined.data.diff.all %>% filter(Time == max(Time)),
+          data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
           min.segment.length = unit(0, 'line'),
           xlim = Sys.Date() + 2,
           show.legend = FALSE,
@@ -254,8 +275,10 @@ server <- function(input, output) {
         )+
             #geom_smooth(aes(x= Time, y=pos.rate, color= Bundesland))+ 
             xlim(Sys.Date()-28,Sys.Date()+5)+
-            ylim(0,NA)+
-            scale_colour_brewer(palette = "Paired")
+           # ylim(0,NA)+
+
+        colScale                
+      
           
     })
   
