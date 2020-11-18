@@ -76,23 +76,27 @@ names(myColors) <- levels(joined.data.diff.all$Bundesland)
 colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
 
 
-# Define UI for application that draws a histogram
+# Define UI 
 ui <- fluidPage(
 
     # Application title
     titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
                   h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v0.201113",
+                  h5("v.201118.1606",
                   h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
 
-         # Show a plot of the generated distribution
-      
+
     
      mainPanel(
        checkboxGroupInput("Bundesland.select", "Bundesland:", 
                    choices=levels(joined.data.diff.all$Bundesland),
                    selected = levels(joined.data.diff.all$Bundesland),
                    inline = TRUE),
+       
+       sliderInput("day.select", "Tage seit Heute ",
+                   min = 3,
+                   max= as.numeric((Sys.Date()-min(joined.data.diff.all$Time))),
+                   value = 45),
        
            plotOutput("Anzahl.mean"),
            plotOutput("inzidenz"),
@@ -108,14 +112,16 @@ server <- function(input, output) {
   
   joined.data.diff.all.f<- reactive({
     joined.data.diff.all%>%filter(Bundesland %in% input$Bundesland.select)
-  })
+  })%>%debounce(2000)
+#range.day<- 58
 
+range.day<-reactive(input$day.select)
 
     output$Anzahl.mean <- renderPlot({
         ggplot()+
             
             labs(title="Log-FÃ¤lle (Punkte: 7 Tages Durchschnitt, Linie: tÃ¤gliche FÃ¤lle, Durchmesser-Punkte: PositivitÃ¤tsrate)",
-                 y= "TÃ¤gliche FÃ¤lle [log]",
+                 y= "TÃ¤gliche FÃ¤lle 7 Tages Durchschnitt [log]",
                  x= "Datum",
                  size="PositivitÃ¤srate")+
             
@@ -124,8 +130,10 @@ server <- function(input, output) {
                            size=pos.rate.mean ))+
             scale_radius(range = c(0, 6))+
             
-            xlim(Sys.Date()-28,Sys.Date()+5)+
-            scale_y_continuous(trans = 'log10',limits =c(10,10000))+
+            xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+            scale_y_continuous(trans = 'log10',
+                               limits =c(10,10000)
+                               )+
             annotation_logticks(sides="lb")+
             
             geom_line(data=joined.data.diff.all.f(),
@@ -135,13 +143,14 @@ server <- function(input, output) {
                                 color=Bundesland),
                             data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                             #direction = "y",
-                            xlim = Sys.Date()+3,
+                            xlim = Sys.Date()+(range.day()*0.1),
                             min.segment.length = unit(0, 'lines'),
                             show.legend = FALSE,
                             segment.color = "black",
                             segment.alpha = 0.2
                             )+ 
         colScale
+        #facet_wrap(~Bundesland)
             #scale_colour_brewer(palette = "Paired", drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
         #scale_colour_discrete(drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
       
@@ -152,7 +161,7 @@ server <- function(input, output) {
         ggplot()+
             
             labs(title="7 Tages Inzidenz",
-                 y= "7Tage Inzidenz",
+                 y= "7Tage Inzidenz pro 100.000 EW",
                  x= "Datum",
                  size="PositivitÃ¤srate")+
             
@@ -160,8 +169,8 @@ server <- function(input, output) {
                        aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
                                                        size=pos.rate.mean))+
             scale_radius(range = c(0, 6))+
-            xlim(Sys.Date()-28,Sys.Date()+5)+
-            #ylim(0,500)+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+        #ylim(0,500)+
             
             geom_text_repel(aes(x= Time, y= SiebenTageInzidenzFaelle, label=formatC(SiebenTageInzidenzFaelle,digits=2,format = "f"),
                                 color=Bundesland),
@@ -188,7 +197,7 @@ server <- function(input, output) {
                   ), size=1.5,
                   
         )+
-        xlim(Sys.Date()-28,Sys.Date()+5)+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
         
         
         
@@ -215,13 +224,15 @@ server <- function(input, output) {
                  x= "Zeit")+
             geom_point(data = joined.data.diff.all.f(),
                        aes(x= Time, y=increase.mean, color=Bundesland,
-                           #size=pos.rate.mean
-                       ))+
+                           
+                       ),
+                       size=2 )+
+                        
             #scale_size(range = c(0, 10))+
             #scale_size_area(max_size = 10)+
             scale_radius(range = c(0, 6))+
-            xlim(Sys.Date()-28,Sys.Date()+5)+
-            # scale_y_continuous(trans = 'log10',limits =c(10,4000))+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+        # scale_y_continuous(trans = 'log10',limits =c(10,4000))+
             # annotation_logticks(sides="lb")+
             
             geom_line(data=joined.data.diff.all.f(),
@@ -239,7 +250,8 @@ server <- function(input, output) {
                             segment.alpha = 0.2
             )+ 
             ylim(1.25*min(tail(joined.data.diff.all$increase.mean,280)),1.25*max(tail(joined.data.diff.all$increase.mean,280)))+
-        colScale                
+        colScale+
+        facet_wrap(~Bundesland)
       
 
            
@@ -252,9 +264,9 @@ server <- function(input, output) {
                  x= "Zeit")+
             geom_line(aes(x= Time, y=pos.rate.mean, color= Bundesland))+
             geom_point(aes(x= Time, y=pos.rate.mean, color= Bundesland,
-                           #size=pos.rate.mean))+
-                           #scale_radius(range = c(0, 8)
-            ))+
+                           size=pos.rate.mean))+
+                           scale_radius(range = c(0, 6))+
+            
             
             
             
@@ -273,9 +285,7 @@ server <- function(input, output) {
           segment.alpha = 0.2
 
         )+
-            #geom_smooth(aes(x= Time, y=pos.rate, color= Bundesland))+ 
-            xlim(Sys.Date()-28,Sys.Date()+5)+
-           # ylim(0,NA)+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
 
         colScale                
       
