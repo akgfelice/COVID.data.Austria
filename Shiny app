@@ -64,7 +64,7 @@ joined.data.diff.all<-joined.data%>%
     mutate(increase.mean = rollmean(increase,k = 7, fill = NA, align = "right"))%>%
     mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))
     
-   # filter(row_number() <= n()-1) #last day data incomplete only until 2pm
+   # filter(row_number() <= n()-1) #last day data incomplete only until 2pm (datasources hase been updated)
 
 
 
@@ -82,7 +82,7 @@ ui <- fluidPage(
     # Application title
     titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
                   h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v.201118.1606",
+                  h5("v.20.11.22.14:31",
                   h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
 
 
@@ -132,12 +132,13 @@ range.day<-reactive(input$day.select)
             
             xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
             scale_y_continuous(trans = 'log10',
-                               limits =c(10,10000)
+                              limits =c(10,10000)
                                )+
             annotation_logticks(sides="lb")+
             
             geom_line(data=joined.data.diff.all.f(),
-                      aes(x=Time, y=AnzahlFaelle, color=Bundesland))+
+                      aes(x=Time, y=AnzahlFaelle, color=Bundesland),
+                      alpha=0.2)+
             
             geom_text_repel(aes(x= Time, y=AnzahlFaelle7Tage/7,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
                                 color=Bundesland),
@@ -175,8 +176,7 @@ range.day<-reactive(input$day.select)
             geom_text_repel(aes(x= Time, y= SiebenTageInzidenzFaelle, label=formatC(SiebenTageInzidenzFaelle,digits=2,format = "f"),
                                 color=Bundesland),
                             data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                            xlim = Sys.Date()+2,
-                            show.legend = FALSE,
+                            xlim = (Sys.Date()+(range.day()*0.1)),                            show.legend = FALSE,
                             min.segment.length = unit(0, 'lines'),
                             segment.color = "black",
                             segment.alpha = 0.2
@@ -205,7 +205,7 @@ range.day<-reactive(input$day.select)
                             label=formatC((ICU.Auslastung),digits=1,format ="f"),
                             color=Bundesland),
                         data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                        xlim = Sys.Date()+3,
+                        xlim = (Sys.Date()+(range.day()*0.1)),
                         min.segment.length = unit(0, 'lines'),
                         show.legend = FALSE,
                         segment.color = "black",
@@ -227,14 +227,9 @@ range.day<-reactive(input$day.select)
                            
                        ),
                        size=2 )+
-                        
-            #scale_size(range = c(0, 10))+
-            #scale_size_area(max_size = 10)+
             scale_radius(range = c(0, 6))+
         xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-        # scale_y_continuous(trans = 'log10',limits =c(10,4000))+
-            # annotation_logticks(sides="lb")+
-            
+
             geom_line(data=joined.data.diff.all.f(),
                       aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
             
@@ -242,16 +237,14 @@ range.day<-reactive(input$day.select)
                                 label=formatC((increase.mean),digits=1,format ="f"),
                                 color=Bundesland),
                             data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                            #direction = "y",
-                            xlim = Sys.Date()+3,
-                            min.segment.length = unit(0, 'lines'),
+                            xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
                             show.legend = FALSE,
                             segment.color = "black",
                             segment.alpha = 0.2
             )+ 
-            ylim(1.25*min(tail(joined.data.diff.all$increase.mean,280)),1.25*max(tail(joined.data.diff.all$increase.mean,280)))+
+            ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
         colScale+
-        facet_wrap(~Bundesland)
+       facet_wrap(~Bundesland,ncol = 2)
       
 
            
@@ -279,7 +272,7 @@ range.day<-reactive(input$day.select)
           ),
           data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
           min.segment.length = unit(0, 'line'),
-          xlim = Sys.Date() + 2,
+          xlim = (Sys.Date()+(range.day()*0.1)),
           show.legend = FALSE,
           segment.color = "black",
           segment.alpha = 0.2
