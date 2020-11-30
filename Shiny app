@@ -82,7 +82,7 @@ ui <- fluidPage(
     # Application title
     titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
                   h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v.20.11.22.14:31",
+                  h5("v.20.11.30.11.39",
                   h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
 
 
@@ -100,6 +100,7 @@ ui <- fluidPage(
        
            plotOutput("Anzahl.mean"),
            plotOutput("inzidenz"),
+           plotOutput("increase.rate.sum"),
            plotOutput("increase.rate"),
            plotOutput("ICU"),
            plotOutput("pos.rate")
@@ -126,7 +127,7 @@ range.day<-reactive(input$day.select)
                  size="PositivitÃ¤srate")+
             
             geom_point(data = joined.data.diff.all.f(),
-                       aes(x= Time, y=AnzahlFaelle7Tage/7, color=Bundesland,
+                       aes(x= Time, y=AnzahlFaelle.mean, color=Bundesland,
                            size=pos.rate.mean ))+
             scale_radius(range = c(0, 6))+
             
@@ -140,7 +141,7 @@ range.day<-reactive(input$day.select)
                       aes(x=Time, y=AnzahlFaelle, color=Bundesland),
                       alpha=0.2)+
             
-            geom_text_repel(aes(x= Time, y=AnzahlFaelle7Tage/7,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
+            geom_text_repel(aes(x= Time, y=AnzahlFaelle.mean,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
                                 color=Bundesland),
                             data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
                             #direction = "y",
@@ -161,7 +162,7 @@ range.day<-reactive(input$day.select)
     output$inzidenz <- renderPlot({
         ggplot()+
             
-            labs(title="7 Tages Inzidenz",
+            labs(title="7 Tages Inzidenz pro 100.000 Einwohner",
                  y= "7Tage Inzidenz pro 100.000 EW",
                  x= "Datum",
                  size="PositivitÃ¤srate")+
@@ -185,38 +186,39 @@ range.day<-reactive(input$day.select)
      
              
     })
-    
-    output$ICU <- renderPlot({
+
+    output$increase.rate.sum <- renderPlot({
       ggplot()+
-        labs(title="Intensivbettenauslastung",
-             y= "% Auslastung",
-             x= "Datum"
-             )+
-        geom_step(data = joined.data.diff.all.f(),
-                  aes(x= Time, y=ICU.Auslastung, color=Bundesland
-                  ), size=1.5,
-                  
-        )+
+        labs(title="tÃ¤gliche Steigerungsrate in %",
+             y= "tÃ¤gliche Steigerung in %",
+             x= "Zeit")+
+        geom_point(data = joined.data.diff.all.f(),
+                   aes(x= Time, y=increase.mean, color=Bundesland,
+                       
+                   ),
+                   size=2 )+
+        scale_radius(range = c(0, 6))+
         xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
         
+        geom_line(data=joined.data.diff.all.f(),
+                  aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
         
-        
-        geom_text_repel(aes(x= Time, y=ICU.Auslastung,               
-                            label=formatC((ICU.Auslastung),digits=1,format ="f"),
+        geom_text_repel(aes(x= Time, y=increase.mean,               
+                            label=formatC((increase.mean),digits=1,format ="f"),
                             color=Bundesland),
                         data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                        xlim = (Sys.Date()+(range.day()*0.1)),
-                        min.segment.length = unit(0, 'lines'),
+                        xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
                         show.legend = FALSE,
                         segment.color = "black",
                         segment.alpha = 0.2
-                        
         )+ 
-        colScale                
+        ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
+        colScale
       
       
-    }) 
-  
+      
+    })
+    
     output$increase.rate <- renderPlot({
         ggplot()+
             labs(title="tÃ¤gliche Steigerungsrate in %",
@@ -250,6 +252,37 @@ range.day<-reactive(input$day.select)
            
     })
     
+    output$ICU <- renderPlot({
+      ggplot()+
+        labs(title="Intensivbettenauslastung",
+             y= "% Auslastung",
+             x= "Datum"
+        )+
+        geom_step(data = joined.data.diff.all.f(),
+                  aes(x= Time, y=ICU.Auslastung, color=Bundesland
+                  ), size=1.5,
+                  
+        )+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+        
+        
+        
+        geom_text_repel(aes(x= Time, y=ICU.Auslastung,               
+                            label=formatC((ICU.Auslastung),digits=1,format ="f"),
+                            color=Bundesland),
+                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                        xlim = (Sys.Date()+(range.day()*0.1)),
+                        min.segment.length = unit(0, 'lines'),
+                        show.legend = FALSE,
+                        segment.color = "black",
+                        segment.alpha = 0.2
+                        
+        )+ 
+        colScale                
+      
+      
+    }) 
+  
     output$pos.rate <- renderPlot({
         ggplot(data = joined.data.diff.all.f())+
             labs(title="PositivitÃ¤tsraten",
