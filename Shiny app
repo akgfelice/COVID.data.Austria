@@ -193,35 +193,7 @@ infect<-reactive(input$infect.select)
      
              
     })
-    
-    output$praevalenz <- renderPlot({
-      ggplot()+
-        
-        labs(title="7 Tages Prävalenz,(Tägliche Fälle * Tage der Infektösität * Dunkelziffer)/Bevölkerungsanzahl)",
-             y= "Prävalenz %",
-             x= "Datum",
-             size="Positivitäsrate")+
-        
-        geom_point(data = joined.data.diff.all.f(),
-                   aes(x= Time, y= (praevalenz*dunkel()*infect()), color=Bundesland,
-                       size=pos.rate.mean))+
-        scale_radius(range = c(0, 6))+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-        #ylim(0,500)+
-        
-        geom_text_repel(aes(x= Time, y= (praevalenz*dunkel()*infect()), label=formatC((praevalenz*dunkel()*infect()),digits=2,format = "f"),
-                            color=Bundesland),
-                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                        xlim = (Sys.Date()+(range.day()*0.1)),                            show.legend = FALSE,
-                        min.segment.length = unit(0, 'lines'),
-                        segment.color = "black",
-                        segment.alpha = 0.2
-        )+
-        colScale                
-      
-      
-    })
-
+  
     output$increase.rate.sum <- renderPlot({
       ggplot()+
         labs(title="tägliche Steigerungsrate in %",
