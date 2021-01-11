@@ -17,6 +17,8 @@ library(formattable)
 library(gridExtra)
 library(ggthemes)
 library(RColorBrewer)
+library(shinydashboard)
+library(shinydashboardPlus)
 
 #Data 
 
@@ -32,7 +34,7 @@ CovidFallzahlen <- read_delim("https://covid19-dashboard.ages.at/data/CovidFallz
                               ";",
                               escape_double = FALSE,
                               #n_max = 3000 ,
-                              col_types = NULL,
+                              col_types = NULL
                               
 )
 
@@ -44,7 +46,7 @@ data<-CovidFaelle_Timeline %>%
 
 tests.data<-CovidFallzahlen %>%
     mutate(Time = as.Date(MeldeDatum, "%d.%m.%Y%H:%M:%S"))%>%
-    mutate(Bundesland = str_replace(Bundesland, "Alle", "Ãsterreich"))%>%
+    mutate(Bundesland = str_replace(Bundesland, "Alle", "Österreich"))%>%
     mutate(Bundesland = as.factor(Bundesland))
 
 joined.data<-full_join(data,tests.data,by = c("Time", "Bundesland", "BundeslandID"))
@@ -62,7 +64,9 @@ joined.data.diff.all<-joined.data%>%
     mutate(dtest.mean = rollmean(dtest,k = 7, fill = NA, align = "right"))%>%
     mutate(increase = 100*((c(NA, diff(AnzahlFaelle.mean)))/AnzahlFaelle.mean))%>% 
     mutate(increase.mean = rollmean(increase,k = 7, fill = NA, align = "right"))%>%
-    mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))
+    mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))%>%
+    mutate(praevalenz=100*(AnzahlFaelle.mean/AnzEinwohner))     
+                     
     
    # filter(row_number() <= n()-1) #last day data incomplete only until 2pm (datasources hase been updated)
 
@@ -80,9 +84,9 @@ colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
 ui <- fluidPage(
 
     # Application title
-    titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
+    titlePanel(h1("Österreichische COVID Datenauswertung basierend auf AGES Daten",
                   h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v.20.11.30.11.39",
+                  h5("v.21.01.11.14.55",
                   h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
 
 
@@ -96,7 +100,8 @@ ui <- fluidPage(
        sliderInput("day.select", "Tage seit Heute ",
                    min = 3,
                    max= as.numeric((Sys.Date()-min(joined.data.diff.all$Time))),
-                   value = 45),
+                   value = 100),
+       
        
            plotOutput("Anzahl.mean"),
            plotOutput("inzidenz"),
@@ -111,20 +116,22 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  joined.data.diff.all.f<- reactive({
-    joined.data.diff.all%>%filter(Bundesland %in% input$Bundesland.select)
+joined.data.diff.all.f<- reactive(
+  {joined.data.diff.all%>%
+      filter(Bundesland %in% input$Bundesland.select)
   })%>%debounce(2000)
-#range.day<- 58
 
 range.day<-reactive(input$day.select)
+dunkel<-reactive(input$dunkel.select)
+infect<-reactive(input$infect.select)
 
     output$Anzahl.mean <- renderPlot({
         ggplot()+
             
-            labs(title="Log-FÃ¤lle (Punkte: 7 Tages Durchschnitt, Linie: tÃ¤gliche FÃ¤lle, Durchmesser-Punkte: PositivitÃ¤tsrate)",
-                 y= "TÃ¤gliche FÃ¤lle 7 Tages Durchschnitt [log]",
+            labs(title="Log-Fälle (Punkte: 7 Tages Durchschnitt, Linie: tägliche Fälle, Durchmesser-Punkte: Positivitätsrate)",
+                 y= "Tägliche Fälle 7 Tages Durchschnitt [log]",
                  x= "Datum",
-                 size="PositivitÃ¤srate")+
+                 size="Positivitäsrate")+
             
             geom_point(data = joined.data.diff.all.f(),
                        aes(x= Time, y=AnzahlFaelle.mean, color=Bundesland,
@@ -165,7 +172,7 @@ range.day<-reactive(input$day.select)
             labs(title="7 Tages Inzidenz pro 100.000 Einwohner",
                  y= "7Tage Inzidenz pro 100.000 EW",
                  x= "Datum",
-                 size="PositivitÃ¤srate")+
+                 size="Positivitäsrate")+
             
             geom_point(data = joined.data.diff.all.f(),
                        aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
@@ -186,11 +193,39 @@ range.day<-reactive(input$day.select)
      
              
     })
+    
+    output$praevalenz <- renderPlot({
+      ggplot()+
+        
+        labs(title="7 Tages Prävalenz,(Tägliche Fälle * Tage der Infektösität * Dunkelziffer)/Bevölkerungsanzahl)",
+             y= "Prävalenz %",
+             x= "Datum",
+             size="Positivitäsrate")+
+        
+        geom_point(data = joined.data.diff.all.f(),
+                   aes(x= Time, y= (praevalenz*dunkel()*infect()), color=Bundesland,
+                       size=pos.rate.mean))+
+        scale_radius(range = c(0, 6))+
+        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+        #ylim(0,500)+
+        
+        geom_text_repel(aes(x= Time, y= (praevalenz*dunkel()*infect()), label=formatC((praevalenz*dunkel()*infect()),digits=2,format = "f"),
+                            color=Bundesland),
+                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                        xlim = (Sys.Date()+(range.day()*0.1)),                            show.legend = FALSE,
+                        min.segment.length = unit(0, 'lines'),
+                        segment.color = "black",
+                        segment.alpha = 0.2
+        )+
+        colScale                
+      
+      
+    })
 
     output$increase.rate.sum <- renderPlot({
       ggplot()+
-        labs(title="tÃ¤gliche Steigerungsrate in %",
-             y= "tÃ¤gliche Steigerung in %",
+        labs(title="tägliche Steigerungsrate in %",
+             y= "tägliche Steigerung in %",
              x= "Zeit")+
         geom_point(data = joined.data.diff.all.f(),
                    aes(x= Time, y=increase.mean, color=Bundesland,
@@ -221,8 +256,8 @@ range.day<-reactive(input$day.select)
     
     output$increase.rate <- renderPlot({
         ggplot()+
-            labs(title="tÃ¤gliche Steigerungsrate in %",
-                 y= "tÃ¤gliche Steigerung in %",
+            labs(title="tägliche Steigerungsrate in %",
+                 y= "tägliche Steigerung in %",
                  x= "Zeit")+
             geom_point(data = joined.data.diff.all.f(),
                        aes(x= Time, y=increase.mean, color=Bundesland,
@@ -285,8 +320,8 @@ range.day<-reactive(input$day.select)
   
     output$pos.rate <- renderPlot({
         ggplot(data = joined.data.diff.all.f())+
-            labs(title="PositivitÃ¤tsraten",
-                 y= "PositivitÃ¤tsraten",
+            labs(title="Positivitätsraten",
+                 y= "Positivitätsraten",
                  x= "Zeit")+
             geom_line(aes(x= Time, y=pos.rate.mean, color= Bundesland))+
             geom_point(aes(x= Time, y=pos.rate.mean, color= Bundesland,
