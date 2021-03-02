@@ -1,12 +1,3 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(tidyverse)
 library(ggpubr)
@@ -40,293 +31,36 @@ CovidFallzahlen <- read_delim("https://covid19-dashboard.ages.at/data/CovidFallz
 
 #mutations
 data<-CovidFaelle_Timeline %>%
-    mutate(Time = as.Date(Time, "%d.%m.%Y%H:%M:%S"))%>%
-    mutate(Bundesland = as.factor(Bundesland))%>%
-    mutate(SiebenTageInzidenzFaelle = as.numeric((gsub(",", ".", gsub("\\.", "", SiebenTageInzidenzFaelle)))))
+  mutate(Time = as.Date(Time, "%d.%m.%Y%H:%M:%S"))%>%
+  mutate(Bundesland = as.factor(Bundesland))%>%
+  mutate(SiebenTageInzidenzFaelle = as.numeric((gsub(",", ".", gsub("\\.", "", SiebenTageInzidenzFaelle)))))
 
 tests.data<-CovidFallzahlen %>%
-    mutate(Time = as.Date(MeldeDatum, "%d.%m.%Y%H:%M:%S"))%>%
-    mutate(Bundesland = str_replace(Bundesland, "Alle", "Österreich"))%>%
-    mutate(Bundesland = as.factor(Bundesland))
+  mutate(Time = as.Date(MeldeDatum, "%d.%m.%Y%H:%M:%S"))%>%
+  mutate(Bundesland = str_replace(Bundesland, "Alle", "Österreich"))%>%
+  mutate(Bundesland = as.factor(Bundesland))
 
 joined.data<-full_join(data,tests.data,by = c("Time", "Bundesland", "BundeslandID"))
 
 joined.data.diff.all<-joined.data%>%
-    group_by(BundeslandID)%>%
-    mutate(AnzahlFaelle.mean = rollmean(AnzahlFaelle,k = 7, fill = NA, align = "right"))%>%
-    mutate(freq.vs.mean=(AnzahlFaelle.mean-AnzahlFaelle))%>% 
-    mutate(AnzahlFaelle7Tage.pD = (AnzahlFaelle7Tage/7))%>%
-    mutate(dtest=c(NA, diff(TestGesamt)))%>%
-    mutate(pos.rate=(((AnzahlFaelle)/dtest)*100))%>%
-    mutate(pos.rate = ifelse(is.infinite(pos.rate), NA, pos.rate))%>%
-    mutate(pos.rate = round(pos.rate,2))%>%
-    mutate(pos.rate.mean =rollapply(pos.rate,7, mean, na.rm = TRUE, by = 1, partial = TRUE, align = "right"))%>%
-    mutate(dtest.mean = rollmean(dtest,k = 7, fill = NA, align = "right"))%>%
-    mutate(increase = 100*((c(NA, diff(AnzahlFaelle.mean)))/AnzahlFaelle.mean))%>% 
-    mutate(increase.mean = rollmean(increase,k = 7, fill = NA, align = "right"))%>%
-    mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))%>%
-    mutate(praevalenz=100*(AnzahlFaelle.mean/AnzEinwohner))     
-                     
-    
-   # filter(row_number() <= n()-1) #last day data incomplete only until 2pm (datasources hase been updated)
+  group_by(BundeslandID)%>%
+  mutate(AnzahlFaelle.mean = rollmean(AnzahlFaelle,k = 7, fill = NA, align = "right"))%>%
+  mutate(freq.vs.mean=(AnzahlFaelle.mean-AnzahlFaelle))%>% 
+  mutate(AnzahlFaelle7Tage.pD = (AnzahlFaelle7Tage/7))%>%
+  mutate(dtest=c(NA, diff(TestGesamt)))%>%
+  mutate(pos.rate=(((AnzahlFaelle)/dtest)*100))%>%
+  mutate(pos.rate = ifelse(is.infinite(pos.rate), NA, pos.rate))%>%
+  mutate(pos.rate = round(pos.rate,2))%>%
+  mutate(pos.rate.mean =rollapply(pos.rate,7, mean, na.rm = TRUE, by = 1, partial = TRUE, align = "right"))%>%
+  mutate(dtest.mean = rollmean(dtest,k = 7, fill = NA, align = "right"))%>%
+  mutate(increase = 100*((c(NA, diff(AnzahlFaelle.mean)))/AnzahlFaelle.mean))%>% 
+  mutate(increase.mean = rollmean(increase,k = 7, fill = NA, align = "right"))%>%
+  mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))%>%
+  mutate(pos.rate.mean.diff= (100*(1-(pos.rate.mean/lag(pos.rate.mean)))))%>%  
+  mutate(pos.rate.mean.diff = round(pos.rate.mean.diff,3))%>%
+  #mutate(pos.rate.mean.diff = rollmean(pos.rate.mean.diff,k = 7, fill = NA, align = "right"))%>%
+  mutate(praevalenz=100*(AnzahlFaelle.mean/AnzEinwohner))     
 
 
+# filter(row_number() <= n()-1) #last day data incomplete only until 2pm (datasources hase been updated)
 
-
-joined.data.diff.wien<-joined.data.diff.all%>%filter(Bundesland == 'Wien')
-
-myColors <- brewer.pal(10,"Paired")
-names(myColors) <- levels(joined.data.diff.all$Bundesland)
-colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
-
-
-# Define UI 
-ui <- fluidPage(
-
-    # Application title
-    titlePanel(h1("Österreichische COVID Datenauswertung basierend auf AGES Daten",
-                  h2( "Stand", max(joined.data.diff.all$Time),
-                  h5("v.21.01.11.14.55",
-                  h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
-
-
-    
-     mainPanel(
-       checkboxGroupInput("Bundesland.select", "Bundesland:", 
-                   choices=levels(joined.data.diff.all$Bundesland),
-                   selected = levels(joined.data.diff.all$Bundesland),
-                   inline = TRUE),
-       
-       sliderInput("day.select", "Tage seit Heute ",
-                   min = 3,
-                   max= as.numeric((Sys.Date()-min(joined.data.diff.all$Time))),
-                   value = 100),
-       
-       
-           plotOutput("Anzahl.mean"),
-           plotOutput("inzidenz"),
-           plotOutput("increase.rate.sum"),
-           plotOutput("increase.rate"),
-           plotOutput("ICU"),
-           plotOutput("pos.rate")
-         
-        )
-    )
-
-
-server <- function(input, output) {
-  
-joined.data.diff.all.f<- reactive(
-  {joined.data.diff.all%>%
-      filter(Bundesland %in% input$Bundesland.select)
-  })%>%debounce(2000)
-
-range.day<-reactive(input$day.select)
-dunkel<-reactive(input$dunkel.select)
-infect<-reactive(input$infect.select)
-
-    output$Anzahl.mean <- renderPlot({
-        ggplot()+
-            
-            labs(title="Log-Fälle (Punkte: 7 Tages Durchschnitt, Linie: tägliche Fälle, Durchmesser-Punkte: Positivitätsrate)",
-                 y= "Tägliche Fälle 7 Tages Durchschnitt [log]",
-                 x= "Datum",
-                 size="Positivitäsrate")+
-            
-            geom_point(data = joined.data.diff.all.f(),
-                       aes(x= Time, y=AnzahlFaelle.mean, color=Bundesland,
-                           size=pos.rate.mean ))+
-            scale_radius(range = c(0, 6))+
-            
-            xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-            scale_y_continuous(trans = 'log10',
-                              limits =c(10,10000)
-                               )+
-            annotation_logticks(sides="lb")+
-            
-            geom_line(data=joined.data.diff.all.f(),
-                      aes(x=Time, y=AnzahlFaelle, color=Bundesland),
-                      alpha=0.2)+
-            
-            geom_text_repel(aes(x= Time, y=AnzahlFaelle.mean,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
-                                color=Bundesland),
-                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                            #direction = "y",
-                            xlim = Sys.Date()+(range.day()*0.1),
-                            min.segment.length = unit(0, 'lines'),
-                            show.legend = FALSE,
-                            segment.color = "black",
-                            segment.alpha = 0.2
-                            )+ 
-        colScale
-        #facet_wrap(~Bundesland)
-            #scale_colour_brewer(palette = "Paired", drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
-        #scale_colour_discrete(drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
-      
-           
-    })
-    
-    output$inzidenz <- renderPlot({
-        ggplot()+
-            
-            labs(title="7 Tages Inzidenz pro 100.000 Einwohner",
-                 y= "7Tage Inzidenz pro 100.000 EW",
-                 x= "Datum",
-                 size="Positivitäsrate")+
-            
-            geom_point(data = joined.data.diff.all.f(),
-                       aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
-                                                       size=pos.rate.mean))+
-            scale_radius(range = c(0, 6))+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-        #ylim(0,500)+
-            
-            geom_text_repel(aes(x= Time, y= SiebenTageInzidenzFaelle, label=formatC(SiebenTageInzidenzFaelle,digits=2,format = "f"),
-                                color=Bundesland),
-                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                            xlim = (Sys.Date()+(range.day()*0.1)),                            show.legend = FALSE,
-                            min.segment.length = unit(0, 'lines'),
-                            segment.color = "black",
-                            segment.alpha = 0.2
-                            )+
-            colScale                
-     
-             
-    })
-  
-    output$increase.rate.sum <- renderPlot({
-      ggplot()+
-        labs(title="tägliche Steigerungsrate in %",
-             y= "tägliche Steigerung in %",
-             x= "Zeit")+
-        geom_point(data = joined.data.diff.all.f(),
-                   aes(x= Time, y=increase.mean, color=Bundesland,
-                       
-                   ),
-                   size=2 )+
-        scale_radius(range = c(0, 6))+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-        
-        geom_line(data=joined.data.diff.all.f(),
-                  aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
-        
-        geom_text_repel(aes(x= Time, y=increase.mean,               
-                            label=formatC((increase.mean),digits=1,format ="f"),
-                            color=Bundesland),
-                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                        xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
-                        show.legend = FALSE,
-                        segment.color = "black",
-                        segment.alpha = 0.2
-        )+ 
-        ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
-        colScale
-      
-      
-      
-    })
-    
-    output$increase.rate <- renderPlot({
-        ggplot()+
-            labs(title="tägliche Steigerungsrate in %",
-                 y= "tägliche Steigerung in %",
-                 x= "Zeit")+
-            geom_point(data = joined.data.diff.all.f(),
-                       aes(x= Time, y=increase.mean, color=Bundesland,
-                           
-                       ),
-                       size=2 )+
-            scale_radius(range = c(0, 6))+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-
-            geom_line(data=joined.data.diff.all.f(),
-                      aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
-            
-            geom_text_repel(aes(x= Time, y=increase.mean,               
-                                label=formatC((increase.mean),digits=1,format ="f"),
-                                color=Bundesland),
-                            data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                            xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
-                            show.legend = FALSE,
-                            segment.color = "black",
-                            segment.alpha = 0.2
-            )+ 
-            ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
-        colScale+
-       facet_wrap(~Bundesland,ncol = 2)
-      
-
-           
-    })
-    
-    output$ICU <- renderPlot({
-      ggplot()+
-        labs(title="Intensivbettenauslastung",
-             y= "% Auslastung",
-             x= "Datum"
-        )+
-        geom_step(data = joined.data.diff.all.f(),
-                  aes(x= Time, y=ICU.Auslastung, color=Bundesland
-                  ), size=1.5,
-                  
-        )+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-        
-        
-        
-        geom_text_repel(aes(x= Time, y=ICU.Auslastung,               
-                            label=formatC((ICU.Auslastung),digits=1,format ="f"),
-                            color=Bundesland),
-                        data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
-                        xlim = (Sys.Date()+(range.day()*0.1)),
-                        min.segment.length = unit(0, 'lines'),
-                        show.legend = FALSE,
-                        segment.color = "black",
-                        segment.alpha = 0.2
-                        
-        )+ 
-        colScale                
-      
-      
-    }) 
-  
-    output$pos.rate <- renderPlot({
-        ggplot(data = joined.data.diff.all.f())+
-            labs(title="Positivitätsraten",
-                 y= "Positivitätsraten",
-                 x= "Zeit")+
-            geom_line(aes(x= Time, y=pos.rate.mean, color= Bundesland))+
-            geom_point(aes(x= Time, y=pos.rate.mean, color= Bundesland,
-                           size=pos.rate.mean))+
-                           scale_radius(range = c(0, 6))+
-            
-            
-            
-            
-        geom_text_repel(
-          aes(
-            x = Time,
-            y = pos.rate.mean,
-            label = formatC(pos.rate.mean, digits = 1, format = "f"),
-            color = Bundesland
-          ),
-          data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
-          min.segment.length = unit(0, 'line'),
-          xlim = (Sys.Date()+(range.day()*0.1)),
-          show.legend = FALSE,
-          segment.color = "black",
-          segment.alpha = 0.2
-
-        )+
-        xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
-
-        colScale                
-      
-          
-    })
-  
-
-}
-
-# Run the application 
-shinyApp(ui = ui, server = server)
