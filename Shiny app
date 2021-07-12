@@ -1,3 +1,12 @@
+
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
 library(shiny)
 library(tidyverse)
 library(ggpubr)
@@ -10,6 +19,7 @@ library(ggthemes)
 library(RColorBrewer)
 library(shinydashboard)
 library(shinydashboardPlus)
+library(lubridate)
 
 #Data 
 
@@ -37,7 +47,7 @@ data<-CovidFaelle_Timeline %>%
 
 tests.data<-CovidFallzahlen %>%
   mutate(Time = as.Date(MeldeDatum, "%d.%m.%Y%H:%M:%S"))%>%
-  mutate(Bundesland = str_replace(Bundesland, "Alle", "Österreich"))%>%
+  mutate(Bundesland = str_replace(Bundesland, "Alle", "Ãsterreich"))%>%
   mutate(Bundesland = as.factor(Bundesland))
 
 joined.data<-full_join(data,tests.data,by = c("Time", "Bundesland", "BundeslandID"))
@@ -56,11 +66,387 @@ joined.data.diff.all<-joined.data%>%
   mutate(increase = 100*((c(NA, diff(AnzahlFaelle.mean)))/AnzahlFaelle.mean))%>% 
   mutate(increase.mean = rollmean(increase,k = 7, fill = NA, align = "right"))%>%
   mutate(ICU.Auslastung=100*(FZICU/(FZICU+FZICUFree)))%>%
-  mutate(pos.rate.mean.diff= (100*(1-(pos.rate.mean/lag(pos.rate.mean)))))%>%  
+  mutate(FZICU.rate.mean=rollmean(c(NA,diff(FZICU)),k = 7, fill = NA, align = "right"))%>%
+  mutate(FZICU.rate=100*(FZICU.rate.mean/(lag(AnzahlFaelle.mean,10))))%>%
+  mutate(pos.rate.mean.diff= (100*(1-(lag(pos.rate.mean)/pos.rate.mean))))%>%  
   mutate(pos.rate.mean.diff = round(pos.rate.mean.diff,3))%>%
   #mutate(pos.rate.mean.diff = rollmean(pos.rate.mean.diff,k = 7, fill = NA, align = "right"))%>%
-  mutate(praevalenz=100*(AnzahlFaelle.mean/AnzEinwohner))     
+  mutate(praevalenz=100*(AnzahlFaelle.mean/AnzEinwohner))%>%
+  mutate(wochentag= wday(Time,label = TRUE, abbr = FALSE))
+
 
 
 # filter(row_number() <= n()-1) #last day data incomplete only until 2pm (datasources hase been updated)
 
+
+
+
+joined.data.diff.wien<-joined.data.diff.all%>%filter(Bundesland == 'Wien')
+
+myColors <- brewer.pal(10,"Paired")
+names(myColors) <- levels(joined.data.diff.all$Bundesland)
+colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
+
+
+# Define UI 
+ui <- fluidPage(
+  
+  # Application title
+  titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
+                h2( "Stand", max(joined.data.diff.all$Time),
+                    h5("v.2021.07.13.12.02",
+                       h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
+  
+  
+  
+  mainPanel(
+    checkboxGroupInput("Bundesland.select", "Bundesland:", 
+                       choices=levels(joined.data.diff.all$Bundesland),
+                       selected = levels(joined.data.diff.all$Bundesland),
+                       inline = TRUE),
+    
+    sliderInput("day.select", "Tage seit Heute ",
+                min = 3,
+                max= as.numeric((Sys.Date()-min(joined.data.diff.all$Time))),
+                value = 100),
+    
+    
+    plotOutput("Anzahl.mean"),
+    plotOutput("inzidenz"),
+    plotOutput("increase.rate.sum"),
+    plotOutput("increase.rate"),
+    plotOutput("ICU"),
+    plotOutput("ICU.rate"),
+    plotOutput("pos.rate"),
+    plotOutput("pos.rate.inc")
+    
+  )
+)
+
+
+server <- function(input, output) {
+  
+  joined.data.diff.all.f<- reactive(
+    {joined.data.diff.all%>%
+        filter(Bundesland %in% input$Bundesland.select)
+    })%>%debounce(2000)
+  
+  range.day<-reactive(input$day.select)
+  dunkel<-reactive(input$dunkel.select)
+  infect<-reactive(input$infect.select)
+  
+  output$Anzahl.mean <- renderPlot({
+    ggplot()+
+      
+      labs(title="Log-FÃ¤lle (Punkte: 7 Tages Durchschnitt, Linie: tÃ¤gliche FÃ¤lle, Durchmesser-Punkte: PositivitÃ¤tsrate)",
+           y= "TÃ¤gliche FÃ¤lle (7 Tages Durchschnitt [log])",
+           x= "Datum",
+           size="PositivitÃ¤srate")+
+      
+      geom_point(data = joined.data.diff.all.f(),
+                 aes(x= Time, y=AnzahlFaelle.mean, color=Bundesland,
+                     size=pos.rate.mean ))+
+      scale_radius(range = c(0, 6))+
+      
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      scale_y_continuous(trans = 'log10',
+                         limits =c(10,10000)
+      )+
+      annotation_logticks(sides="lb")+
+      
+      geom_line(data=joined.data.diff.all.f(),
+                aes(x=Time, y=AnzahlFaelle, color=Bundesland),
+                alpha=0.2)+
+      
+      geom_text_repel(aes(x= Time, y=AnzahlFaelle.mean,                label=formatC((AnzahlFaelle7Tage/7),digits=1,format ="f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      #direction = "y",
+                      xlim = Sys.Date()+(range.day()*0.1),
+                      min.segment.length = unit(0, 'lines'),
+                      show.legend = FALSE,
+                      segment.color = "black",
+                      segment.alpha = 0.2
+      )+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+                 )+
+      colScale
+    #facet_wrap(~Bundesland)
+    #scale_colour_brewer(palette = "Paired", drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
+    #scale_colour_discrete(drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
+    
+    
+  })
+  
+  output$inzidenz <- renderPlot({
+    ggplot()+
+      
+      labs(title="7 Tages Inzidenz pro 100.000 Einwohner",
+           y= "7Tage Inzidenz pro 100.000 EW",
+           x= "Datum",
+           size="PositivitÃ¤srate")+
+      
+      geom_point(data = joined.data.diff.all.f(),
+                 aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
+                     size=pos.rate.mean))+
+      scale_radius(range = c(1, 6))+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      ylim(0,350)+
+      
+      geom_text_repel(aes(x= Time, y= SiebenTageInzidenzFaelle, label=formatC(SiebenTageInzidenzFaelle,digits=2,format = "f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      xlim = (Sys.Date()+(range.day()*0.1)),                            show.legend = FALSE,
+                      min.segment.length = unit(0, 'lines'),
+                      segment.color = "black",
+                      segment.alpha = 0.2
+      )+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      colScale
+    
+    
+    
+  })
+  
+  output$increase.rate.sum <- renderPlot({
+    ggplot()+
+      labs(title="tÃ¤gliche Steigerungsrate in %",
+           y= "tÃ¤gliche Steigerung in %",
+           x= "Zeit")+
+      geom_point(data = joined.data.diff.all.f(),
+                 aes(x= Time, y=increase.mean, color=Bundesland,
+                     
+                 ),
+                 size=2 )+
+      scale_radius(range = c(0, 6))+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      
+      geom_line(data=joined.data.diff.all.f(),
+                aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
+      
+      geom_text_repel(aes(x= Time, y=increase.mean,               
+                          label=formatC((increase.mean),digits=1,format ="f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
+                      show.legend = FALSE,
+                      segment.color = "black",
+                      segment.alpha = 0.2
+      )+ 
+      ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      colScale
+    
+    
+    
+  })
+  
+  output$increase.rate <- renderPlot({
+    ggplot()+
+      labs(title="tÃ¤gliche Steigerungsrate in %",
+           y= "tÃ¤gliche Steigerung in %",
+           x= "Zeit")+
+      geom_point(data = joined.data.diff.all.f(),
+                 aes(x= Time, y=increase.mean, color=Bundesland,
+                     
+                 ),
+                 size=2 )+
+      scale_radius(range = c(1, 6))+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      
+      geom_line(data=joined.data.diff.all.f(),
+                aes(x=Time, y=increase.mean, color=Bundesland), alpha=0.3)+
+      
+      geom_text_repel(aes(x= Time, y=increase.mean,               
+                          label=formatC((increase.mean),digits=1,format ="f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      xlim = (Sys.Date()+(range.day()*0.1)),                            min.segment.length = unit(0, 'lines'),
+                      show.legend = FALSE,
+                      segment.color = "black",
+                      segment.alpha = 0.2
+      )+ 
+      ylim(1.05*min(tail(joined.data.diff.all$increase.mean,range.day()*10)),1.05*max(tail(joined.data.diff.all$increase.mean,range.day()*10)))+
+      colScale+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      facet_wrap(~Bundesland,ncol = 2)
+    
+    
+    
+  })
+  
+  output$ICU <- renderPlot({
+    ggplot()+
+      labs(title="Punkte:Intensiv Belegung; Linie:Neuinfektionen Vor 10 Tagen",
+           y= "Zahlen Belegte Betten",
+           x= "Datum"
+      )+
+      geom_point(data = joined.data.diff.all.f(),
+                aes(x= Time, y=FZICU, color=Bundesland
+                ), size=1.5,
+                
+      )+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      
+      geom_line(data=joined.data.diff.all.f(),
+                aes(x=Time, y=(lag(AnzahlFaelle.mean,(10*10))/7), color=Bundesland),
+                alpha=0.3)+
+      
+      geom_text_repel(aes(x= Time, y=FZICU,               
+                          label=formatC((FZICU),digits=1,format ="f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      xlim = (Sys.Date()+(range.day()*0.1)),
+                      min.segment.length = unit(0, 'lines'),
+                      show.legend = FALSE,
+                      segment.color = "black",
+                      segment.alpha = 0.2
+                      
+      )+
+      ylim(1.05*min(tail(joined.data.diff.all$FZICU,range.day()*10)),1.05*max(tail(joined.data.diff.all$FZICU,range.day()*10)))+
+      
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      colScale                
+    
+    
+  }) 
+  
+  output$ICU.rate <- renderPlot({
+    ggplot()+
+      labs(title="Rate der Intensivpflichtigen (vgl. zu Infektionszahlen vor 10 Tagen)",
+           y= "Rate vs. Infektion",
+           x= "Datum"
+      )+
+      geom_line(data = joined.data.diff.all.f(),aes(x= Time, y=FZICU.rate, color=Bundesland))+
+      geom_point(data = joined.data.diff.all.f(),
+                 aes(x= Time, y=FZICU.rate, color=Bundesland
+                 ), size=1.5,
+                 
+      )+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      ylim(1.05*min(tail(joined.data.diff.all$FZICU.rate,range.day()*10)),1.05*max(tail(joined.data.diff.all$FZICU.rate,range.day()*10)))+
+      
+      
+      
+      
+      geom_text_repel(aes(x= Time, y=FZICU.rate,               
+                          label=formatC((FZICU.rate),digits=2,format ="f"),
+                          color=Bundesland),
+                      data=joined.data.diff.all.f()%>%filter(Time == max(Time)),
+                      xlim = (Sys.Date()+(range.day()*0.1)),
+                      min.segment.length = unit(0, 'lines'),
+                      show.legend = FALSE,
+                      segment.color = "black",
+                      segment.alpha = 0.2
+                      
+      )+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      colScale                
+    
+    
+  }) 
+  
+  
+  output$pos.rate <- renderPlot({
+    ggplot(data = joined.data.diff.all.f())+
+      labs(title="PositivitÃ¤tsraten",
+           y= "PositivitÃ¤tsraten",
+           x= "Zeit")+
+      geom_line(aes(x= Time, y=pos.rate.mean, color= Bundesland))+
+      geom_point(aes(x= Time, y=pos.rate.mean, color= Bundesland,
+                     size=pos.rate.mean))+
+      scale_radius(range = c(1, 6))+
+      scale_y_continuous(trans = 'log10',
+                         limits =c(0.01,5))+
+      
+      
+      
+      
+      geom_text_repel(
+        aes(
+          x = Time,
+          y = pos.rate.mean,
+          label = formatC(pos.rate.mean, digits = 1, format = "f"),
+          color = Bundesland
+        ),
+        data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
+        min.segment.length = unit(0, 'line'),
+        xlim = (Sys.Date()+(range.day()*0.1)),
+        show.legend = FALSE,
+        segment.color = "black",
+        segment.alpha = 0.2
+        
+      )+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      colScale                
+    
+    
+  })
+  
+  
+  output$pos.rate.inc <- renderPlot({
+    ggplot(data = joined.data.diff.all.f())+
+      labs(title="PositivitÃÂ¤tsraten Zunahme",
+           y= "PositivitÃÂ¤tsraten Zunahme",
+           x= "Zeit")+
+      geom_line(aes(x= Time, y=pos.rate.mean.diff, color= Bundesland))+
+      geom_point(aes(x= Time, y=pos.rate.mean.diff, color= Bundesland
+                     ))+
+      scale_radius(range = c(0, 6))+
+      ylim(c(-20,20))+
+      
+      geom_text_repel(
+        aes(
+          x = Time,
+          y = pos.rate.mean.diff,
+          label = formatC(pos.rate.mean.diff, digits = 1, format = "f"),
+          color = Bundesland
+        ),
+        data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
+        min.segment.length = unit(0, 'line'),
+        xlim = (Sys.Date()+(range.day()*0.1)),
+        show.legend = FALSE,
+        segment.color = "black",
+        segment.alpha = 0.2
+        
+      )+
+      xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
+      facet_wrap(~Bundesland,ncol = 2)+
+      geom_vline(linetype=4,
+                 data=joined.data.diff.all%>%filter(wochentag=='Montag'),
+                 aes(xintercept = Time)
+      )+
+      
+      colScale                
+    
+    
+  })
+  
+  
+  
+  
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
