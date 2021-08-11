@@ -1,4 +1,3 @@
-
 # This is a Shiny web application. You can run the application by clicking
 # the 'Run App' button above.
 #
@@ -47,7 +46,7 @@ data<-CovidFaelle_Timeline %>%
 
 tests.data<-CovidFallzahlen %>%
   mutate(Time = as.Date(MeldeDatum, "%d.%m.%Y%H:%M:%S"))%>%
-  mutate(Bundesland = str_replace(Bundesland, "Alle", "Ãsterreich"))%>%
+  mutate(Bundesland = str_replace(Bundesland, "Alle", "Österreich"))%>%
   mutate(Bundesland = as.factor(Bundesland))
 
 joined.data<-full_join(data,tests.data,by = c("Time", "Bundesland", "BundeslandID"))
@@ -92,9 +91,9 @@ colScale <- scale_colour_manual(name = "Bundesland",values = myColors)
 ui <- fluidPage(
   
   # Application title
-  titlePanel(h1("Ãsterreichische COVID Datenauswertung basierend auf AGES Daten",
+  titlePanel(h1("Österreichische COVID Datenauswertung basierend auf AGES Daten",
                 h2( "Stand", max(joined.data.diff.all$Time),
-                    h5("v.2021.07.13.12.02",
+                    h5("v1",
                        h6(a("Link zum Skript zur Berechnung und Darstellung",href="https://github.com/akgfelice/COVID.data.Austria.git")))))),
   
   
@@ -108,7 +107,7 @@ ui <- fluidPage(
     sliderInput("day.select", "Tage seit Heute ",
                 min = 3,
                 max= as.numeric((Sys.Date()-min(joined.data.diff.all$Time))),
-                value = 100),
+                value = 21),
     
     
     plotOutput("Anzahl.mean"),
@@ -116,7 +115,7 @@ ui <- fluidPage(
     plotOutput("increase.rate.sum"),
     plotOutput("increase.rate"),
     plotOutput("ICU"),
-    plotOutput("ICU.rate"),
+    #plotOutput("ICU.rate"),
     plotOutput("pos.rate"),
     plotOutput("pos.rate.inc")
     
@@ -138,10 +137,10 @@ server <- function(input, output) {
   output$Anzahl.mean <- renderPlot({
     ggplot()+
       
-      labs(title="Log-FÃ¤lle (Punkte: 7 Tages Durchschnitt, Linie: tÃ¤gliche FÃ¤lle, Durchmesser-Punkte: PositivitÃ¤tsrate)",
-           y= "TÃ¤gliche FÃ¤lle (7 Tages Durchschnitt [log])",
+      labs(title="Log-Fälle (Punkte: 7 Tages Durchschnitt, Linie: täliche Fälle, Durchmesser-Punkte: Positivitätsrate)",
+           y= "Täliche Fälle (7 Tages Durchschnitt [log])",
            x= "Datum",
-           size="PositivitÃ¤srate")+
+           size="Positivitäsrate")+
       
       geom_point(data = joined.data.diff.all.f(),
                  aes(x= Time, y=AnzahlFaelle.mean, color=Bundesland,
@@ -171,7 +170,7 @@ server <- function(input, output) {
       geom_vline(linetype=4,
                  data=joined.data.diff.all%>%filter(wochentag=='Montag'),
                  aes(xintercept = Time)
-                 )+
+      )+
       colScale
     #facet_wrap(~Bundesland)
     #scale_colour_brewer(palette = "Paired", drop=TRUE,limits = levels(joined.data.diff.all$Bundesland))
@@ -186,7 +185,7 @@ server <- function(input, output) {
       labs(title="7 Tages Inzidenz pro 100.000 Einwohner",
            y= "7Tage Inzidenz pro 100.000 EW",
            x= "Datum",
-           size="PositivitÃ¤srate")+
+           size="Positivitäsrate")+
       
       geom_point(data = joined.data.diff.all.f(),
                  aes(x= Time, y= SiebenTageInzidenzFaelle, color=Bundesland,
@@ -215,8 +214,8 @@ server <- function(input, output) {
   
   output$increase.rate.sum <- renderPlot({
     ggplot()+
-      labs(title="tÃ¤gliche Steigerungsrate in %",
-           y= "tÃ¤gliche Steigerung in %",
+      labs(title="täliche Steigerungsrate in %",
+           y= "täliche Steigerung in %",
            x= "Zeit")+
       geom_point(data = joined.data.diff.all.f(),
                  aes(x= Time, y=increase.mean, color=Bundesland,
@@ -251,8 +250,8 @@ server <- function(input, output) {
   
   output$increase.rate <- renderPlot({
     ggplot()+
-      labs(title="tÃ¤gliche Steigerungsrate in %",
-           y= "tÃ¤gliche Steigerung in %",
+      labs(title="täliche Steigerungsrate in %",
+           y= "täliche Steigerung in %",
            x= "Zeit")+
       geom_point(data = joined.data.diff.all.f(),
                  aes(x= Time, y=increase.mean, color=Bundesland,
@@ -293,9 +292,9 @@ server <- function(input, output) {
            x= "Datum"
       )+
       geom_point(data = joined.data.diff.all.f(),
-                aes(x= Time, y=FZICU, color=Bundesland
-                ), size=1.5,
-                
+                 aes(x= Time, y=FZICU, color=Bundesland
+                 ), size=1.5,
+                 
       )+
       xlim(Sys.Date()-range.day(),Sys.Date()+(range.day()*0.2))+
       
@@ -366,8 +365,8 @@ server <- function(input, output) {
   
   output$pos.rate <- renderPlot({
     ggplot(data = joined.data.diff.all.f())+
-      labs(title="PositivitÃ¤tsraten",
-           y= "PositivitÃ¤tsraten",
+      labs(title="Positivitätsraten",
+           y= "Positivitätsraten",
            x= "Zeit")+
       geom_line(aes(x= Time, y=pos.rate.mean, color= Bundesland))+
       geom_point(aes(x= Time, y=pos.rate.mean, color= Bundesland,
@@ -383,7 +382,7 @@ server <- function(input, output) {
         aes(
           x = Time,
           y = pos.rate.mean,
-          label = formatC(pos.rate.mean, digits = 1, format = "f"),
+          label = formatC(pos.rate.mean, digits = 2, format = "f"),
           color = Bundesland
         ),
         data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
@@ -407,20 +406,20 @@ server <- function(input, output) {
   
   output$pos.rate.inc <- renderPlot({
     ggplot(data = joined.data.diff.all.f())+
-      labs(title="PositivitÃÂ¤tsraten Zunahme",
-           y= "PositivitÃÂ¤tsraten Zunahme",
+      labs(title="Positivitätsraten Zunahme",
+           y= "Positivitätsraten Zunahme",
            x= "Zeit")+
       geom_line(aes(x= Time, y=pos.rate.mean.diff, color= Bundesland))+
       geom_point(aes(x= Time, y=pos.rate.mean.diff, color= Bundesland
-                     ))+
+      ))+
       scale_radius(range = c(0, 6))+
-      ylim(c(-20,20))+
+      ylim(c(-40,40))+
       
       geom_text_repel(
         aes(
           x = Time,
           y = pos.rate.mean.diff,
-          label = formatC(pos.rate.mean.diff, digits = 1, format = "f"),
+          label = formatC(pos.rate.mean.diff, digits = 2, format = "f"),
           color = Bundesland
         ),
         data = joined.data.diff.all.f() %>% filter(Time == max(Time)),
